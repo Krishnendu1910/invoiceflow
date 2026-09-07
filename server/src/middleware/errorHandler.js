@@ -23,10 +23,16 @@ function errorHandler(err, req, res, next) {
     console.error(err);
   }
 
-  res.status(statusCode).json({
+  const body = {
     success: false,
     message: statusCode >= 500 && env.isProduction ? "Internal server error." : err.message,
-  });
+  };
+
+  if (statusCode < 500 && err.details) {
+    body.details = err.details;
+  }
+
+  res.status(statusCode).json(body);
 }
 
 module.exports = errorHandler;
