@@ -10,6 +10,8 @@ const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const businessRoutes = require("./routes/business.routes");
+const customerRoutes = require("./routes/customer.routes");
+const itemRoutes = require("./routes/item.routes");
 
 function createApp() {
   const app = express();
@@ -42,6 +44,8 @@ function createApp() {
 
   app.use("/api/auth", authRoutes);
   app.use("/api/businesses", businessRoutes);
+  app.use("/api/customers", customerRoutes);
+  app.use("/api/items", itemRoutes);
 
   app.use("/api", notFound);
   app.use(errorHandler);
