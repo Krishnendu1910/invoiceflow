@@ -14,6 +14,7 @@ import CustomerList from "./pages/customers/CustomerList";
 import CustomerForm from "./pages/customers/CustomerForm";
 import ItemList from "./pages/items/ItemList";
 import ItemForm from "./pages/items/ItemForm";
+import Settings from "./pages/settings/Settings";
 
 function App() {
   return (
@@ -42,6 +43,8 @@ function App() {
               <Route path="/items" element={<ItemList />} />
               <Route path="/items/new" element={<ItemForm />} />
               <Route path="/items/:id" element={<ItemForm />} />
+
+              <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
 

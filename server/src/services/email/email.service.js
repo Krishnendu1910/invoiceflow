@@ -1,9 +1,18 @@
 const env = require("../../config/env");
-const provider = require("./resend.provider");
+const resendProvider = require("./resend.provider");
+const developmentProvider = require("./development.provider");
 
-// Authentication/business logic only ever calls these two functions — the
-// choice of email provider (currently Resend) and the HTML templates stay
-// isolated in this module and resend.provider.js.
+// Authentication and user flows call sendVerificationEmail or sendPasswordResetEmail.
+// Email delivery provider selection is resolved dynamically based on EMAIL_MODE.
+function getProvider() {
+  if (env.email.mode === "development") {
+    if (env.isProduction || process.env.NODE_ENV === "production") {
+      throw new Error("Development email delivery cannot be used in production.");
+    }
+    return developmentProvider;
+  }
+  return resendProvider;
+}
 
 function verificationEmailHtml(link) {
   return `
@@ -24,20 +33,30 @@ function passwordResetEmailHtml(link) {
 
 async function sendVerificationEmail(to, rawToken) {
   const link = `${env.clientUrl}/verify-email?token=${rawToken}`;
+  const provider = getProvider();
   return provider.send({
     to,
     subject: "Verify your InvoiceFlow email address",
     html: verificationEmailHtml(link),
+    type: "verification",
+    link,
   });
 }
 
 async function sendPasswordResetEmail(to, rawToken) {
   const link = `${env.clientUrl}/reset-password?token=${rawToken}`;
+  const provider = getProvider();
   return provider.send({
     to,
     subject: "Reset your InvoiceFlow password",
     html: passwordResetEmailHtml(link),
+    type: "password_reset",
+    link,
   });
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail };
+module.exports = {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  getProvider,
+};

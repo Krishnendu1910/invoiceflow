@@ -24,7 +24,12 @@ export default function Signup() {
       await register(form.name, form.email, form.password);
       navigate("/verify-email", { state: { justRegistered: true, email: form.email }, replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Something went wrong. Please try again.");
+      const msg = err.response?.data?.message || "";
+      if (/resend|provider|api[_-]?key|domain/i.test(msg)) {
+        setError("Unable to send verification email at this time. Please try again later.");
+      } else {
+        setError(msg || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

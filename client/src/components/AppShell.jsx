@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Outlet } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/useAuth";
 import { BusinessProvider } from "../context/BusinessContext";
 import { useBusiness } from "../context/useBusiness";
@@ -16,6 +17,7 @@ const navLinkClass = ({ isActive }) =>
 function AppShellContent() {
   const { user, logout } = useAuth();
   const { business, status } = useBusiness();
+  const { t } = useTranslation();
 
   if (status === "loading") {
     return <FullPageSpinner />;
@@ -33,13 +35,16 @@ function AppShellContent() {
             <span className="text-sm font-semibold text-slate-900">{business.name}</span>
             <nav className="flex gap-1">
               <NavLink to="/" end className={navLinkClass}>
-                Dashboard
+                {t("navigation.dashboard", "Dashboard")}
               </NavLink>
               <NavLink to="/customers" className={navLinkClass}>
-                Customers
+                {t("navigation.customers", "Customers")}
               </NavLink>
               <NavLink to="/items" className={navLinkClass}>
-                Items
+                {t("navigation.items", "Items")}
+              </NavLink>
+              <NavLink to="/settings" className={navLinkClass}>
+                {t("navigation.settings", "Settings")}
               </NavLink>
             </nav>
           </div>
