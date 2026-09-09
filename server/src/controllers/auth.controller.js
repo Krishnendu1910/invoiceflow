@@ -15,7 +15,12 @@ function attachSessionCookie(res, refreshToken, session) {
 }
 
 const config = asyncHandler(async (req, res) => {
-  return sendSuccess(res, { data: { googleEnabled: googleService.isConfigured } });
+  return sendSuccess(res, {
+    data: {
+      googleEnabled: googleService.isConfigured,
+      emailMode: env.email.mode,
+    },
+  });
 });
 
 const register = asyncHandler(async (req, res) => {

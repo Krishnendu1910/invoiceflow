@@ -16,6 +16,22 @@ export default function VerifyEmail() {
 
   const [resendEmail, setResendEmail] = useState(location.state?.email || "");
   const [resendStatus, setResendStatus] = useState("idle");
+  const [emailMode, setEmailMode] = useState("resend");
+
+  useEffect(() => {
+    let cancelled = false;
+    authApi
+      .getConfig()
+      .then((res) => {
+        if (!cancelled && res.data?.emailMode) {
+          setEmailMode(res.data.emailMode);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -73,7 +89,11 @@ export default function VerifyEmail() {
           </Button>
         </form>
         {resendStatus === "sent" && (
-          <Alert variant="success">If an account exists with that email, a new verification link has been sent.</Alert>
+          <Alert variant={emailMode === "development" ? "info" : "success"}>
+            {emailMode === "development"
+              ? "Verification email is simulated in development. Check the backend terminal for the verification link."
+              : "If an account exists with that email, a new verification link has been sent."}
+          </Alert>
         )}
       </AuthLayout>
     );
@@ -81,11 +101,24 @@ export default function VerifyEmail() {
 
   // status === "awaiting": user just registered and has no token yet.
   return (
-    <AuthLayout title="Check your email" subtitle="We've sent a verification link to your inbox.">
-      <p className="mb-4 text-sm text-slate-500">
-        Click the link in the email to verify {resendEmail ? <strong>{resendEmail}</strong> : "your account"}. You can
-        log in before verifying, but some actions require a verified email.
-      </p>
+    <AuthLayout
+      title={emailMode === "development" ? "Verification link generated" : "Check your email"}
+      subtitle={
+        emailMode === "development"
+          ? "Verification email is simulated in development."
+          : "We've sent a verification link to your inbox."
+      }
+    >
+      {emailMode === "development" ? (
+        <Alert variant="info">
+          Verification email is simulated in development. Check the backend terminal for the verification link.
+        </Alert>
+      ) : (
+        <p className="mb-4 text-sm text-slate-500">
+          Click the link in the email to verify {resendEmail ? <strong>{resendEmail}</strong> : "your account"}. You can
+          log in before verifying, but some actions require a verified email.
+        </p>
+      )}
       <form className="space-y-4" onSubmit={handleResend}>
         <FormField
           label="Didn't get it? Resend to:"
@@ -99,7 +132,11 @@ export default function VerifyEmail() {
         </Button>
       </form>
       {resendStatus === "sent" && (
-        <Alert variant="success">If an account exists with that email, a new verification link has been sent.</Alert>
+        <Alert variant={emailMode === "development" ? "info" : "success"}>
+          {emailMode === "development"
+            ? "Verification email is simulated in development. Check the backend terminal for the verification link."
+            : "If an account exists with that email, a new verification link has been sent."}
+        </Alert>
       )}
       <p className="mt-6 text-center text-sm text-slate-500">
         <Link to="/login" className="font-medium text-indigo-600 hover:underline">

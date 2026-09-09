@@ -27,4 +27,24 @@ function requireBusinessAccess(source = "query") {
   });
 }
 
-module.exports = { requireBusinessAccess };
+// Reads the business ID from req.params[paramName] (defaulting to "id") and
+// verifies the authenticated user owns it. Used by Business Settings routes
+// where the business ID is part of the URL path (e.g. /:id/settings/...).
+// Attaches the full Business document to req.business so controllers can
+// pass it directly to services without a second DB lookup.
+function requireBusinessOwner(paramName = "id") {
+  return asyncHandler(async (req, res, next) => {
+    const raw = req.params?.[paramName];
+
+    if (!raw || !objectId.safeParse(raw).success) {
+      throw new ApiError(400, "A valid business ID is required.");
+    }
+
+    const business = await businessService.getOwnedBusinessOrThrow(req.user._id, raw);
+    req.businessId = business._id;
+    req.business = business;
+    next();
+  });
+}
+
+module.exports = { requireBusinessAccess, requireBusinessOwner };

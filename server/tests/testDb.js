@@ -1,24 +1,36 @@
-const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
+const { MongoMemoryReplSet } = require("mongodb-memory-server");
 
-let mongod;
+let replSet;
 
 async function connect() {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-}
+  replSet = await MongoMemoryReplSet.create({
+    replSet: {
+      count: 1,
+      storageEngine: "wiredTiger",
+    },
+  });
 
-async function disconnect() {
-  await mongoose.connection.dropDatabase();
-  await mongoose.connection.close();
-  await mongod.stop();
+  await mongoose.connect(replSet.getUri());
 }
 
 async function clear() {
   const collections = mongoose.connection.collections;
+
   for (const key of Object.keys(collections)) {
     await collections[key].deleteMany({});
   }
 }
 
-module.exports = { connect, disconnect, clear };
+async function disconnect() {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+
+  if (replSet) {
+    await replSet.stop();
+    replSet = null;
+  }
+}
+
+module.exports = { connect, clear, disconnect };
