@@ -12,6 +12,7 @@ const authRoutes = require("./routes/auth.routes");
 const businessRoutes = require("./routes/business.routes");
 const customerRoutes = require("./routes/customer.routes");
 const itemRoutes = require("./routes/item.routes");
+const documentRoutes = require("./routes/document.routes");
 
 function createApp() {
   const app = express();
@@ -46,6 +47,7 @@ function createApp() {
   app.use("/api/businesses", businessRoutes);
   app.use("/api/customers", customerRoutes);
   app.use("/api/items", itemRoutes);
+  app.use("/api/documents", documentRoutes);
 
   app.use("/api", notFound);
   app.use(errorHandler);
