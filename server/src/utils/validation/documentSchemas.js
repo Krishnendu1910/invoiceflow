@@ -179,6 +179,8 @@ const transitionInvoiceStatusSchema = z
   })
   .strict();
 
+const convertToInvoiceSchema = z.object({}).strict().optional().default({});
+
 module.exports = {
   discountTypeEnum,
   taxTypeEnum,
@@ -196,6 +198,7 @@ module.exports = {
   listDocumentsQuerySchema,
   idParam,
   transitionInvoiceStatusSchema,
+  convertToInvoiceSchema,
 };
 
 

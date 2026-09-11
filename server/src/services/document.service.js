@@ -1,4 +1,11 @@
-const { Document, INVOICE_STATUSES, INVOICE_STATUS_TRANSITIONS } = require("../models/Document");
+const mongoose = require("mongoose");
+const {
+  Document,
+  INVOICE_STATUSES,
+  QUOTATION_STATUSES,
+  INVOICE_STATUS_TRANSITIONS,
+  QUOTATION_STATUS_TRANSITIONS,
+} = require("../models/Document");
 const Customer = require("../models/Customer");
 const ApiError = require("../utils/ApiError");
 const escapeRegex = require("../utils/escapeRegex");
@@ -23,6 +30,9 @@ function toPublicDocument(doc) {
     viewedAt: doc.viewedAt || null,
     paidAt: doc.paidAt || null,
     cancelledAt: doc.cancelledAt || null,
+    acceptedAt: doc.acceptedAt || null,
+    rejectedAt: doc.rejectedAt || null,
+    expiredAt: doc.expiredAt || null,
     pricingMode: doc.pricingMode,
     currency: doc.currency,
     customer: doc.customer,
@@ -40,7 +50,20 @@ function toPublicDocument(doc) {
     notes: doc.notes || "",
     terms: doc.terms || "",
     paymentInfo: doc.paymentInfo || {},
-    conversion: doc.conversion || {},
+    conversion: doc.conversion
+      ? {
+          ...(doc.conversion.convertedToInvoiceId && {
+            convertedToInvoiceId: doc.conversion.convertedToInvoiceId.toString(),
+          }),
+          ...(doc.conversion.convertedFromQuotationId && {
+            convertedFromQuotationId: doc.conversion.convertedFromQuotationId.toString(),
+          }),
+          ...((doc.conversion.sourceQuotationId || doc.conversion.convertedFromQuotationId) && {
+            sourceQuotationId: (doc.conversion.sourceQuotationId || doc.conversion.convertedFromQuotationId).toString(),
+          }),
+          convertedAt: doc.conversion.convertedAt || null,
+        }
+      : {},
     version: doc.version,
     metadata: doc.metadata || {},
     createdAt: doc.createdAt,
@@ -424,6 +447,233 @@ async function transitionInvoiceStatus(userId, documentId, targetStatus) {
   return toPublicDocument(updated);
 }
 
+async function transitionQuotationStatus(userId, documentId, targetStatus) {
+  const document = await getOwnedDocumentOrThrow(userId, documentId);
+
+  if (document.type !== "quotation") {
+    throw new ApiError(400, "Quotation lifecycle transitions only apply to quotations.");
+  }
+
+  if (!QUOTATION_STATUSES.includes(targetStatus)) {
+    throw new ApiError(400, `Invalid quotation status "${targetStatus}".`);
+  }
+
+  if (document.status === targetStatus) {
+    throw new ApiError(400, `Quotation is already in "${targetStatus}" status.`);
+  }
+
+  const allowed = QUOTATION_STATUS_TRANSITIONS[document.status] || [];
+  if (!allowed.includes(targetStatus)) {
+    throw new ApiError(400, `Cannot transition quotation from "${document.status}" to "${targetStatus}".`);
+  }
+
+  if (targetStatus === "converted") {
+    throw new ApiError(400, 'Cannot transition quotation to "converted" via status endpoint. Use the conversion endpoint.');
+  }
+
+  const updatePayload = {
+    $set: {
+      status: targetStatus,
+    },
+  };
+
+  if (targetStatus === "sent" && !document.sentAt) {
+    updatePayload.$set.sentAt = new Date();
+  } else if (targetStatus === "viewed" && !document.viewedAt) {
+    updatePayload.$set.viewedAt = new Date();
+  } else if (targetStatus === "accepted" && !document.acceptedAt) {
+    updatePayload.$set.acceptedAt = new Date();
+  } else if (targetStatus === "rejected" && !document.rejectedAt) {
+    updatePayload.$set.rejectedAt = new Date();
+  } else if (targetStatus === "expired" && !document.expiredAt) {
+    updatePayload.$set.expiredAt = new Date();
+  } else if (targetStatus === "converted" && !document.conversion?.convertedAt) {
+    updatePayload.$set["conversion.convertedAt"] = new Date();
+  }
+
+  const updated = await Document.findOneAndUpdate(
+    {
+      _id: document._id,
+      type: "quotation",
+      status: document.status,
+    },
+    updatePayload,
+    { returnDocument: "after", runValidators: true }
+  );
+
+  if (!updated) {
+    const fresh = await Document.findById(documentId);
+    if (!fresh) {
+      throw new ApiError(404, "Document not found.");
+    }
+    if (fresh.status === targetStatus) {
+      throw new ApiError(400, `Quotation is already in "${targetStatus}" status.`);
+    }
+    const freshAllowed = QUOTATION_STATUS_TRANSITIONS[fresh.status] || [];
+    if (!freshAllowed.includes(targetStatus)) {
+      throw new ApiError(400, `Cannot transition quotation from "${fresh.status}" to "${targetStatus}".`);
+    }
+    throw new ApiError(409, "Concurrent quotation status transition conflict. Please retry.");
+  }
+
+  return toPublicDocument(updated);
+}
+
+async function transitionDocumentStatus(userId, documentId, targetStatus) {
+  const document = await getOwnedDocumentOrThrow(userId, documentId);
+
+  if (document.type === "invoice") {
+    return transitionInvoiceStatus(userId, documentId, targetStatus);
+  }
+  if (document.type === "quotation") {
+    return transitionQuotationStatus(userId, documentId, targetStatus);
+  }
+
+  throw new ApiError(400, "Unsupported document type for status transition.");
+}
+
+async function convertQuotationToInvoice(userId, quotationId) {
+  const quotation = await getOwnedDocumentOrThrow(userId, quotationId);
+
+  if (quotation.type !== "quotation") {
+    throw new ApiError(400, "Only quotation documents can be converted to an invoice.");
+  }
+
+  if (quotation.status === "converted" || quotation.conversion?.convertedToInvoiceId) {
+    throw new ApiError(400, "Quotation has already been converted.");
+  }
+
+  if (quotation.status !== "accepted") {
+    throw new ApiError(400, `Only accepted quotations can be converted to invoices. Current status is "${quotation.status}".`);
+  }
+
+  const session = await mongoose.startSession();
+  let createdInvoice;
+  let updatedQuotation;
+
+  try {
+    await session.withTransaction(async () => {
+      const conversionDate = new Date();
+      const newInvoiceId = new mongoose.Types.ObjectId();
+
+      const lockedQuotation = await Document.findOneAndUpdate(
+        {
+          _id: quotation._id,
+          type: "quotation",
+          status: "accepted",
+          $or: [
+            { "conversion.convertedToInvoiceId": { $exists: false } },
+            { "conversion.convertedToInvoiceId": null },
+          ],
+        },
+        {
+          $set: {
+            status: "converted",
+            "conversion.convertedToInvoiceId": newInvoiceId,
+            "conversion.convertedAt": conversionDate,
+          },
+        },
+        { session, returnDocument: "after" }
+      );
+
+      if (!lockedQuotation) {
+        const current = await Document.findById(quotationId).session(session);
+        if (!current) {
+          throw new ApiError(404, "Document not found.");
+        }
+        if (current.status === "converted" || current.conversion?.convertedToInvoiceId) {
+          throw new ApiError(400, "Quotation has already been converted.");
+        }
+        throw new ApiError(409, "Quotation conversion conflict. Please retry.");
+      }
+
+      const allocated = await numberingService.allocateNextNumber(quotation.businessId, "invoice", { session });
+
+      const linesForCalculation = quotation.lines.map((l) => ({
+        itemId: l.itemId,
+        name: l.name,
+        description: l.description,
+        hsnSac: l.hsnSac,
+        quantity: l.quantity,
+        unit: l.unit,
+        rate: l.rate,
+        discount: l.discount ? { type: l.discount.type, value: l.discount.value } : { type: "none", value: 0 },
+        tax: l.tax ? { type: l.tax.type, rate: l.tax.rate, treatment: l.tax.treatment } : { type: "none", rate: 0 },
+      }));
+
+      const overallDiscount = quotation.overallDiscount && quotation.overallDiscount.type !== "none"
+        ? { type: quotation.overallDiscount.type, value: quotation.overallDiscount.value }
+        : { type: "none", value: 0 };
+
+      const additionalCharges = (quotation.additionalCharges || []).map((c) => ({
+        name: c.name,
+        amount: c.amount,
+        tax: c.tax ? { type: c.tax.type, rate: c.tax.rate, treatment: c.tax.treatment } : { type: "none", rate: 0 },
+      }));
+
+      const calculation = calculateDocument({
+        lines: linesForCalculation,
+        pricingMode: quotation.pricingMode,
+        overallDiscount,
+        additionalCharges,
+        currency: quotation.currency,
+      });
+
+      const customerSnapshot = JSON.parse(JSON.stringify(quotation.customer));
+      const businessSnapshot = JSON.parse(JSON.stringify(quotation.business));
+
+      const [invoiceDoc] = await Document.create(
+        [
+          {
+            _id: newInvoiceId,
+            businessId: quotation.businessId,
+            type: "invoice",
+            number: allocated.formattedNumber,
+            status: "draft",
+            issueDate: new Date(),
+            dueDate: null,
+            pricingMode: calculation.pricingMode,
+            currency: calculation.currency,
+            customer: customerSnapshot,
+            business: businessSnapshot,
+            lines: calculation.lines,
+            subtotal: calculation.subtotal,
+            lineDiscountTotal: calculation.lineDiscountTotal,
+            overallDiscount: calculation.overallDiscount,
+            taxableAmount: calculation.taxableAmount,
+            taxes: calculation.taxes,
+            taxTotal: calculation.taxTotal,
+            additionalCharges: calculation.additionalCharges,
+            additionalChargesTotal: calculation.additionalChargesTotal,
+            grandTotal: calculation.grandTotal,
+            notes: quotation.notes || "",
+            terms: quotation.terms || "",
+            paymentInfo: quotation.paymentInfo ? JSON.parse(JSON.stringify(quotation.paymentInfo)) : {},
+            conversion: {
+              convertedFromQuotationId: quotation._id,
+              sourceQuotationId: quotation._id,
+              convertedAt: conversionDate,
+            },
+            metadata: {
+              convertedFromQuotationNumber: quotation.number,
+            },
+          },
+        ],
+        { session }
+      );
+
+      createdInvoice = invoiceDoc;
+      updatedQuotation = lockedQuotation;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    invoice: toPublicDocument(createdInvoice),
+    quotation: toPublicDocument(updatedQuotation),
+  };
+}
 
 module.exports = {
   toPublicDocument,
@@ -434,6 +684,10 @@ module.exports = {
   updateDraftDocument,
   deleteDraftDocument,
   transitionInvoiceStatus,
+  transitionQuotationStatus,
+  transitionDocumentStatus,
+  convertQuotationToInvoice,
 };
+
 
 

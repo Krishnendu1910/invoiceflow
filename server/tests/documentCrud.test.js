@@ -26,26 +26,13 @@ afterEach(async () => {
   jest.clearAllMocks();
 });
 
-let userCounter = 0;
-
 async function verifiedUserWithBusiness({ name, email, password }, businessName = "Test Co") {
-  const uniqueEmail = `crud_${Date.now()}_${userCounter++}_${email}`;
-  const regRes = await request(app).post("/api/auth/register").send({ name, email: uniqueEmail, password });
-  if (regRes.status !== 201) {
-    throw new Error(`Register failed with status ${regRes.status}: ${JSON.stringify(regRes.body)}`);
-  }
-
+  await request(app).post("/api/auth/register").send({ name, email, password });
   const calls = emailService.sendVerificationEmail.mock.calls;
   const rawToken = calls[calls.length - 1][1];
-  const verifyRes = await request(app).post("/api/auth/verify-email").send({ token: rawToken });
-  if (verifyRes.status !== 200) {
-    throw new Error(`Verify email failed: ${JSON.stringify(verifyRes.body)}`);
-  }
+  await request(app).post("/api/auth/verify-email").send({ token: rawToken });
 
-  const login = await request(app).post("/api/auth/login").send({ email: uniqueEmail, password });
-  if (login.status !== 200) {
-    throw new Error(`Login failed with status ${login.status}: ${JSON.stringify(login.body)}`);
-  }
+  const login = await request(app).post("/api/auth/login").send({ email, password });
   const accessToken = login.body.data.accessToken;
 
   const business = await request(app)

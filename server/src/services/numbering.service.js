@@ -17,8 +17,11 @@ const { getPeriodKey } = require("../utils/fiscalPeriod");
 // duplicates and no in-memory state involved. The configured
 // `startingNumber` offset is pure arithmetic applied after the atomic
 // increment, so it never has to be special-cased inside the atomic op.
-async function allocateNextNumber(businessId, docType) {
-  const business = await Business.findOne({ _id: businessId, isDeleted: false }).lean();
+async function allocateNextNumber(businessId, docType, options = {}) {
+  const session = options.session;
+  const businessQuery = Business.findOne({ _id: businessId, isDeleted: false });
+  if (session) businessQuery.session(session);
+  const business = await businessQuery.lean();
 
   if (!business) {
     throw new ApiError(404, "Business not found.");
@@ -32,10 +35,13 @@ async function allocateNextNumber(businessId, docType) {
 
   const periodKey = getPeriodKey(seriesConfig.resetPolicy, business.fiscalYear?.startMonth ?? 4, new Date());
 
+  const updateOptions = { upsert: true, returnDocument: "after" };
+  if (session) updateOptions.session = session;
+
   const sequence = await DocumentSequence.findOneAndUpdate(
     { businessId, docType, periodKey },
     { $inc: { counter: 1 } },
-    { upsert: true, returnDocument: "after" }
+    updateOptions
   );
 
   const number = sequence.counter + (seriesConfig.startingNumber ?? 1) - 1;

@@ -38,10 +38,23 @@ const deleteDraft = asyncHandler(async (req, res) => {
 });
 
 const transitionStatus = asyncHandler(async (req, res) => {
-  const document = await documentService.transitionInvoiceStatus(req.user._id, req.params.id, req.body.status);
+  const document = await documentService.transitionDocumentStatus(req.user._id, req.params.id, req.body.status);
   return sendSuccess(res, {
-    message: "Invoice status updated.",
+    message: `${document.type === "quotation" ? "Quotation" : "Invoice"} status updated.`,
     data: { document },
+  });
+});
+
+const convertToInvoice = asyncHandler(async (req, res) => {
+  const { invoice, quotation } = await documentService.convertQuotationToInvoice(req.user._id, req.params.id);
+  return sendSuccess(res, {
+    statusCode: 201,
+    message: "Quotation converted to invoice successfully.",
+    data: {
+      document: invoice,
+      invoice,
+      quotation,
+    },
   });
 });
 
@@ -52,6 +65,7 @@ module.exports = {
   update,
   deleteDraft,
   transitionStatus,
+  convertToInvoice,
 };
 
 

@@ -26,26 +26,13 @@ afterEach(async () => {
   jest.clearAllMocks();
 });
 
-let lifecycleUserCounter = 0;
-
 async function verifiedUserWithBusiness({ name, email, password }, businessName = "Test Co") {
-  const uniqueEmail = `life_${Date.now()}_${lifecycleUserCounter++}_${email}`;
-  const regRes = await request(app).post("/api/auth/register").send({ name, email: uniqueEmail, password });
-  if (regRes.status !== 201) {
-    throw new Error(`Register failed with status ${regRes.status}: ${JSON.stringify(regRes.body)}`);
-  }
-
+  await request(app).post("/api/auth/register").send({ name, email, password });
   const calls = emailService.sendVerificationEmail.mock.calls;
   const rawToken = calls[calls.length - 1][1];
-  const verifyRes = await request(app).post("/api/auth/verify-email").send({ token: rawToken });
-  if (verifyRes.status !== 200) {
-    throw new Error(`Verify email failed: ${JSON.stringify(verifyRes.body)}`);
-  }
+  await request(app).post("/api/auth/verify-email").send({ token: rawToken });
 
-  const login = await request(app).post("/api/auth/login").send({ email: uniqueEmail, password });
-  if (login.status !== 200) {
-    throw new Error(`Login failed with status ${login.status}: ${JSON.stringify(login.body)}`);
-  }
+  const login = await request(app).post("/api/auth/login").send({ email, password });
   const accessToken = login.body.data.accessToken;
 
   const business = await request(app)
@@ -432,8 +419,9 @@ describe("Invoice Lifecycle (Phase 5.5)", () => {
       expect(res.body.message).toMatch(/Invoice is already in "sent" status/);
     });
 
-    it("rejects transition on quotation document", async () => {
-      const { accessToken, businessId } = await verifiedUserWithBusiness(userA);
+    it("rejects transition on quotation document via invoice lifecycle", async () => {
+      const documentService = require("../src/services/document.service");
+      const { accessToken, businessId, userId } = await verifiedUserWithBusiness(userA);
       const quoteRes = await authed(request(app).post("/api/documents"), accessToken).send({
         businessId,
         type: "quotation",
@@ -442,14 +430,21 @@ describe("Invoice Lifecycle (Phase 5.5)", () => {
       });
       const quoteId = quoteRes.body.data.document.id;
 
+      // transitionInvoiceStatus directly rejects quotations
+      await expect(
+        documentService.transitionInvoiceStatus(userId, quoteId, "sent")
+      ).rejects.toThrow(/Invoice lifecycle transitions only apply to invoices/);
+
+      // Endpoint rejects invoice-only statuses on quotations
       const res = await authed(
         request(app).patch(`/api/documents/${quoteId}/status`),
         accessToken
-      ).send({ status: "sent" });
+      ).send({ status: "paid" });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/Invoice lifecycle transitions only apply to invoices/);
+      expect(res.body.message).toMatch(/Invalid quotation status "paid"/);
     });
+
 
     it("rejects transition with invalid/unknown status", async () => {
       const { accessToken, businessId } = await verifiedUserWithBusiness(userA);

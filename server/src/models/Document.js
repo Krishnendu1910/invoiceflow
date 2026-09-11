@@ -205,6 +205,7 @@ const conversionSchema = new mongoose.Schema(
   {
     convertedToInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
     convertedFromQuotationId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
+    sourceQuotationId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
     convertedAt: { type: Date },
   },
   { _id: false }
@@ -287,6 +288,15 @@ const documentSchema = new mongoose.Schema(
       type: Date,
     },
     cancelledAt: {
+      type: Date,
+    },
+    acceptedAt: {
+      type: Date,
+    },
+    rejectedAt: {
+      type: Date,
+    },
+    expiredAt: {
       type: Date,
     },
     pricingMode: {
@@ -499,6 +509,9 @@ documentSchema.index({ businessId: 1, type: 1, number: 1 }, { unique: true });
 documentSchema.index({ businessId: 1, type: 1, status: 1 });
 documentSchema.index({ businessId: 1, issueDate: -1 });
 documentSchema.index({ businessId: 1, "customer.customerId": 1 });
+documentSchema.index({ "conversion.convertedToInvoiceId": 1 });
+documentSchema.index({ "conversion.sourceQuotationId": 1 });
+documentSchema.index({ "conversion.convertedFromQuotationId": 1 });
 
 const INVOICE_STATUS_TRANSITIONS = {
   draft: ["sent"],
@@ -510,6 +523,16 @@ const INVOICE_STATUS_TRANSITIONS = {
   cancelled: [],
 };
 
+const QUOTATION_STATUS_TRANSITIONS = {
+  draft: ["sent"],
+  sent: ["viewed", "rejected", "expired"],
+  viewed: ["accepted", "rejected", "expired"],
+  accepted: ["converted"],
+  rejected: [],
+  expired: [],
+  converted: [],
+};
+
 const Document = mongoose.model("Document", documentSchema);
 
 module.exports = {
@@ -518,5 +541,7 @@ module.exports = {
   QUOTATION_STATUSES,
   ALL_STATUSES,
   INVOICE_STATUS_TRANSITIONS,
+  QUOTATION_STATUS_TRANSITIONS,
 };
+
 
