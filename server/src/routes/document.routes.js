@@ -8,6 +8,7 @@ const {
   updateDocumentSchema,
   listDocumentsQuerySchema,
   idParam,
+  transitionInvoiceStatusSchema,
 } = require("../utils/validation/documentSchemas");
 
 const router = express.Router();
@@ -17,8 +18,10 @@ router.use(authenticate, requireVerified);
 router.post("/", requireBusinessAccess("body"), validateBody(createDocumentSchema), controller.create);
 router.get("/", requireBusinessAccess("query"), validateQuery(listDocumentsQuerySchema), controller.list);
 router.get("/:id", validateParams(idParam), controller.getById);
+router.patch("/:id/status", validateParams(idParam), validateBody(transitionInvoiceStatusSchema), controller.transitionStatus);
 router.patch("/:id", validateParams(idParam), validateBody(updateDocumentSchema), controller.update);
 router.delete("/:id", validateParams(idParam), controller.deleteDraft);
 
 module.exports = router;
+
 

@@ -37,11 +37,21 @@ const deleteDraft = asyncHandler(async (req, res) => {
   });
 });
 
+const transitionStatus = asyncHandler(async (req, res) => {
+  const document = await documentService.transitionInvoiceStatus(req.user._id, req.params.id, req.body.status);
+  return sendSuccess(res, {
+    message: "Invoice status updated.",
+    data: { document },
+  });
+});
+
 module.exports = {
   create,
   getById,
   list,
   update,
   deleteDraft,
+  transitionStatus,
 };
+
 

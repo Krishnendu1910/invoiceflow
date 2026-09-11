@@ -1,4 +1,4 @@
-const { Document } = require("../models/Document");
+const { Document, INVOICE_STATUSES, INVOICE_STATUS_TRANSITIONS } = require("../models/Document");
 const Customer = require("../models/Customer");
 const ApiError = require("../utils/ApiError");
 const escapeRegex = require("../utils/escapeRegex");
@@ -19,6 +19,10 @@ function toPublicDocument(doc) {
     issueDate: doc.issueDate,
     dueDate: doc.dueDate || null,
     expiryDate: doc.expiryDate || null,
+    sentAt: doc.sentAt || null,
+    viewedAt: doc.viewedAt || null,
+    paidAt: doc.paidAt || null,
+    cancelledAt: doc.cancelledAt || null,
     pricingMode: doc.pricingMode,
     currency: doc.currency,
     customer: doc.customer,
@@ -356,6 +360,71 @@ async function deleteDraftDocument(userId, documentId) {
   return { id: document._id.toString() };
 }
 
+async function transitionInvoiceStatus(userId, documentId, targetStatus) {
+  const document = await getOwnedDocumentOrThrow(userId, documentId);
+
+  if (document.type !== "invoice") {
+    throw new ApiError(400, "Invoice lifecycle transitions only apply to invoices.");
+  }
+
+  if (!INVOICE_STATUSES.includes(targetStatus)) {
+    throw new ApiError(400, `Invalid invoice status "${targetStatus}".`);
+  }
+
+  if (document.status === targetStatus) {
+    throw new ApiError(400, `Invoice is already in "${targetStatus}" status.`);
+  }
+
+  const allowed = INVOICE_STATUS_TRANSITIONS[document.status] || [];
+  if (!allowed.includes(targetStatus)) {
+    throw new ApiError(400, `Cannot transition invoice from "${document.status}" to "${targetStatus}".`);
+  }
+
+  const updatePayload = {
+    $set: {
+      status: targetStatus,
+    },
+  };
+
+  if (targetStatus === "sent" && !document.sentAt) {
+    updatePayload.$set.sentAt = new Date();
+  } else if (targetStatus === "viewed" && !document.viewedAt) {
+    updatePayload.$set.viewedAt = new Date();
+  } else if (targetStatus === "paid" && !document.paidAt) {
+    updatePayload.$set.paidAt = new Date();
+  } else if (targetStatus === "cancelled" && !document.cancelledAt) {
+    updatePayload.$set.cancelledAt = new Date();
+  }
+
+  const updated = await Document.findOneAndUpdate(
+    {
+      _id: document._id,
+      type: "invoice",
+      status: document.status,
+    },
+    updatePayload,
+    { returnDocument: "after", runValidators: true }
+  );
+
+  if (!updated) {
+    const fresh = await Document.findById(documentId);
+    if (!fresh) {
+      throw new ApiError(404, "Document not found.");
+    }
+    if (fresh.status === targetStatus) {
+      throw new ApiError(400, `Invoice is already in "${targetStatus}" status.`);
+    }
+    const freshAllowed = INVOICE_STATUS_TRANSITIONS[fresh.status] || [];
+    if (!freshAllowed.includes(targetStatus)) {
+      throw new ApiError(400, `Cannot transition invoice from "${fresh.status}" to "${targetStatus}".`);
+    }
+    throw new ApiError(409, "Concurrent invoice status transition conflict. Please retry.");
+  }
+
+  return toPublicDocument(updated);
+}
+
+
 module.exports = {
   toPublicDocument,
   getOwnedDocumentOrThrow,
@@ -364,5 +433,7 @@ module.exports = {
   listDocuments,
   updateDraftDocument,
   deleteDraftDocument,
+  transitionInvoiceStatus,
 };
+
 

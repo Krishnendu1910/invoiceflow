@@ -277,6 +277,18 @@ const documentSchema = new mongoose.Schema(
     expiryDate: {
       type: Date,
     },
+    sentAt: {
+      type: Date,
+    },
+    viewedAt: {
+      type: Date,
+    },
+    paidAt: {
+      type: Date,
+    },
+    cancelledAt: {
+      type: Date,
+    },
     pricingMode: {
       type: String,
       enum: ["exclusive", "inclusive"],
@@ -488,6 +500,16 @@ documentSchema.index({ businessId: 1, type: 1, status: 1 });
 documentSchema.index({ businessId: 1, issueDate: -1 });
 documentSchema.index({ businessId: 1, "customer.customerId": 1 });
 
+const INVOICE_STATUS_TRANSITIONS = {
+  draft: ["sent"],
+  sent: ["viewed", "cancelled"],
+  viewed: ["partially_paid", "paid", "overdue"],
+  partially_paid: ["paid", "overdue", "cancelled"],
+  overdue: ["partially_paid", "paid", "cancelled"],
+  paid: [],
+  cancelled: [],
+};
+
 const Document = mongoose.model("Document", documentSchema);
 
 module.exports = {
@@ -495,5 +517,6 @@ module.exports = {
   INVOICE_STATUSES,
   QUOTATION_STATUSES,
   ALL_STATUSES,
+  INVOICE_STATUS_TRANSITIONS,
 };
 

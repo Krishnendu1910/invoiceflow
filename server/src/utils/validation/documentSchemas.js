@@ -173,6 +173,12 @@ const idParam = z.object({
   id: objectId,
 });
 
+const transitionInvoiceStatusSchema = z
+  .object({
+    status: z.string().trim().min(1, "Status is required"),
+  })
+  .strict();
+
 module.exports = {
   discountTypeEnum,
   taxTypeEnum,
@@ -189,6 +195,7 @@ module.exports = {
   updateDocumentSchema,
   listDocumentsQuerySchema,
   idParam,
+  transitionInvoiceStatusSchema,
 };
 
 
