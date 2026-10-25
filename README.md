@@ -9,6 +9,10 @@ A work-in-progress, India-first invoicing and quotation management platform desi
 <img src="https://img.shields.io/badge/PROJECT%20STATUS-WORK%20IN%20PROGRESS-F59E0B?style=for-the-badge&labelColor=292929" alt="Project Status: Work in Progress" />
 
 <p>
+
+<div>
+  
+</div>
   
   <img src="https://img.shields.io/badge/Frontend-React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Backend-Express%205-222222?style=for-the-badge&logo=express" alt="Express" />
