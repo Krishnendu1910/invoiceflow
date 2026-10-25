@@ -6,8 +6,10 @@
 
 A work-in-progress, India-first invoicing and quotation management platform designed to help small businesses, freelancers, agencies, shops, and service providers manage their business documents more efficiently.
 
+<img src="https://img.shields.io/badge/PROJECT%20STATUS-WORK%20IN%20PROGRESS-F59E0B?style=for-the-badge&labelColor=292929" alt="Project Status: Work in Progress" />
+
 <p>
-  <img src="https://img.shields.io/badge/Status-Work%20in%20Progress-F59E0B?style=for-the-badge" alt="Work in Progress" />
+  
   <img src="https://img.shields.io/badge/Frontend-React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Backend-Express%205-222222?style=for-the-badge&logo=express" alt="Express" />
   <img src="https://img.shields.io/badge/Database-MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
